@@ -1,6 +1,6 @@
 # ConFOOsion
 
-> Personal wiki software
+ConFOOsion is a personal wiki and note-taking software, with a strong focus on minimal resource-usage. Notes are written in Markdown with wiki-link and template extensions.
 
 ## License
 
@@ -20,7 +20,7 @@ See the LICENSE file. In summary (non-binding)
 A Rust-based Markdown parser custom-built for the purposes of ConFOOsion.
 This means that it supports ConFOOsion's _wiki-links_ and _templates_.
 
-Status: Not even started.
+Status: Proof of concept in repo.
 
 ### Core module
 
