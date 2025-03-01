@@ -1,5 +1,5 @@
 [package]
-name = "confoosion"
+name = "confoosion-markdown-parser"
 version = "0.1.0"
 edition = "2021"
 

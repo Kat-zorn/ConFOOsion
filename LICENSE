@@ -1,0 +1,68 @@
+# ConFOOsion license
+
+## Definitions
+
+The “Software” is used to refer to the ConFOOsion software that this license is attached to.
+
+The “Developer,” “I,” “me,” and similar terms are used to refer to the creator of the Software. The Developer is Luka Bijma, or Kat-Zorn, on GitHub.
+
+The “Code” refers to the source code of the Software as available on GitHub. Notably, it only refers to to the version of the Code that this license is distributed with. Future and past licenses apply to their respective versions of the Code.
+
+The “Binaries” are the releases of the Software in binary form. These are created from the Code.
+
+The “Official Binaries” are those created by the Developer, and published in a sufficiently credible manner. This includes, but is not limited to: GitHub releases.
+
+Whereas “Unofficial Binaries” are those created using the Code (or a derivative thereof) by a third party.
+
+A “User” is any person who makes use of the Binaries.
+
+A “Contributor” is any person who wrote (part of) the Code.
+
+A “Product of the Software” is a work such as the Markdown files made using the Software, or output made by the Binaries.
+
+“Derivative works” are works that rely on the Software or include parts of the Software, and also those they reply on or include parts of other Derivative works. Products of the Software are not Derivative Works.
+
+## No Warranty-Clause
+
+The Code and Binaries are provided as-is. No guarantees are made that these will not be harmful nor that they will work as they should.
+
+## Terms of Use
+
+Permission is granted to any User to use the Binaries for the purposes that they are designed. These purposes include, but are not limited to:
+
+- converting Markdown to HTML;
+- editing, viewing, creating, and deleting Markdown files.
+
+These purposes explicitly exclude:
+
+- Running DOOM on the Software.
+- Facilitating illegal activities.
+
+## Intellectual Property Rights
+
+The Developer retains all rights to the trademarks of the Software.
+
+## Derivative works
+
+Any person may, free of charge, and without communication this with the Developer, create a Derivative work.
+
+A Derivative work may be commercial in nature.
+
+Derivative works must provide attribution. This includes at a minimum:
+
+- The name of the Developer,
+- The name of the Software,
+- A link, QR code, or similar referral to the Code.
+
+The authors of a Derivative work that is not for personal use, and relies on a modified version of the Code (such as a GitHub fork) must allow the Developer to view this modified Code, free of charge, whenever the Developers requests this.
+The Developer retains the right to implement any modifications made by this author into the Code without the author's consent. When this happens, this author is given the same rights as a Contributor.
+
+## Contributors
+
+All Contributors have the right to be listed in the CONTRIBUTORS file in the Code. Contributors also have the right to be removed from this file if they do not wish to be listed in there.
+
+All contributors grant the Developer non-exclusive, worldwide rights to the parts of the Code that they played a role in.
+
+## Source availability
+
+The Developers makes the commitment to keep the Code available to the Users. This means that any User will be able to view the Code of the relevant binary, free of charge, whenever they obtain a copy of this Binary through official means.
