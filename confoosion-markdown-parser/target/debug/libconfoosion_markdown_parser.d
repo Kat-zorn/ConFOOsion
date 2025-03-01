@@ -1,0 +1,1 @@
+/home/bluser/code/confoosion/confoosion-markdown-parser/target/debug/libconfoosion_markdown_parser.rlib: /home/bluser/code/confoosion/confoosion-markdown-parser/src/lib.rs /home/bluser/code/confoosion/confoosion-markdown-parser/src/putback.rs
