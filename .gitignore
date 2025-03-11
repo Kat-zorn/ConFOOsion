@@ -1,1 +1,3 @@
-/target
+confoosion-markdown-parser/target
+.*
+!.gitignore
