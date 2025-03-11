@@ -1,6 +1,6 @@
-use confoosion_markdown_parser::{markdown_to_html, ParsedHTML};
+use confoosion_markdown_parser::markdown_file_to_html;
 
 fn main() {
-    let html = markdown_to_html("examples/stars.md");
-    println!("{}", html.html);
+    let parsed = markdown_file_to_html("examples/stars.md").unwrap();
+    println!("{}", parsed.html);
 }
