@@ -64,6 +64,8 @@ where
 pub fn markdown_charbuff_to_html(
     chars: &mut PutBackChars,
 ) -> Result<(ParsedHTML, ExitMode), ParseError> {
+    // TODO: accept the ParsedHTML by mutable reference
+    // TODO: Add parse mode enum for when inside link or template
     let html = String::new();
     let links_to = Vec::new();
     let parents = Vec::new();
@@ -131,7 +133,7 @@ fn has_close_delimiter(chars: &mut PutBackChars, delimiter: TextModifier) -> boo
             }
         },
         TextModifier::Italics => match chars.next() {
-            Some('*') => true,
+            Some('*') => true, // TODO: Only close on “*…,” not on “**.”
             other => {
                 chars.putback_maybe(other);
                 false
@@ -419,6 +421,7 @@ impl ExclusiveModifier {
                 None
             }
             ExclusiveModifier::Heading(level) => {
+                // TODO: turn this into a normal modifier.
                 let mut raw_header = String::new();
                 loop {
                     match chars.next() {
@@ -461,4 +464,5 @@ fn parse_template(
     args: Vec<ParsedHTML>,
 ) -> Result<(ParsedHTML, ExitMode), ParseError> {
     todo!()
+    // TODO, map of dyn Template where Template is a traid with pub fn fmt(self, args: Vec<ParsedHTML>) -> Result<ParsedHTML, ParseError>
 }
