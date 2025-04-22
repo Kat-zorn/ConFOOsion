@@ -30,7 +30,7 @@ impl ParseError {
             column: chars.column_number,
         }
     }
-    pub fn empty(message: &'static str) -> Self {
+    pub fn empty(message: &str) -> Self {
         Self {
             comment: message.to_string(),
             line: 0,

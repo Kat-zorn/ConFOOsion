@@ -1,10 +1,13 @@
-mod error;
-mod putback;
+pub mod error;
+pub mod putback;
+pub mod template;
 
 use error::ParseError;
 use putback::PutBackChars;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use template::{read_template_argument, TemplateMap};
 
+#[derive(Debug)]
 pub struct ParsedHTML {
     pub html: String,
     pub links_to: Vec<String>,
@@ -18,6 +21,7 @@ enum TextModifier {
     Strikethrough,
     Underline,
     Quote,
+    Heading(u8),
 }
 #[derive(Debug, Clone, Copy)]
 enum ExclusiveModifier {
@@ -27,11 +31,11 @@ enum ExclusiveModifier {
     InlineCode,
     CodeBlock,
     Paragraph,
-    Heading(u8),
     Link,
     Image,
     EndOfArgument,
     EndOfTemplate,
+    EndOfLink,
 }
 #[derive(Debug, Clone, Copy)]
 enum Delimiter {
@@ -43,47 +47,68 @@ enum Delimiter {
 pub enum ExitMode {
     EndOfArgument,
     EndOfTemplate,
+    EndOfLink,
     EndOfFile,
 }
 
-pub fn markdown_file_to_html<T>(file: T) -> Result<ParsedHTML, ParseError>
+pub fn markdown_file_to_html<T>(
+    file: T,
+    templates: &mut TemplateMap,
+) -> Result<ParsedHTML, ParseError>
 where
     T: AsRef<Path>,
 {
-    let contents = std::fs::read_to_string(file).unwrap();
+    let contents = match std::fs::read_to_string(&file) {
+        Ok(x) => x,
+        Err(e) => {
+            let msg = match e.into_inner() {
+                Some(x) => x.to_string(),
+                None => "<No error specified>".to_string(),
+            };
+            return Err(ParseError::empty(
+                format!("Could not read file, error: {}", msg).as_str(),
+            ));
+        }
+    };
+    let dir = match file.as_ref().parent() {
+        Some(x) => x,
+        None => {
+            return Err(ParseError::empty(
+                format!("File {} has no parent directory", file.as_ref().display()).as_str(),
+            ))
+        }
+    };
     let mut chars: PutBackChars = contents.chars().into();
     chars.putback('\n');
     chars.line_number = 1;
-    return match markdown_charbuff_to_html(&mut chars)? {
+    return match markdown_charbuff_to_html(&mut chars, templates, dir)? {
         (parsed, ExitMode::EndOfFile) => Ok(parsed),
         (_parsed, ExitMode::EndOfArgument) => Err(ParseError::empty("Stray argument separator")),
         (_parsed, ExitMode::EndOfTemplate) => Err(ParseError::empty("Stray template terminator")),
+        (_parsed, ExitMode::EndOfLink) => Err(ParseError::empty("Stray wiki-link terminator")),
     };
 }
 
-pub fn markdown_charbuff_to_html(
+pub fn markdown_charbuff_to_html<P: AsRef<Path>>(
     chars: &mut PutBackChars,
+    templates: &TemplateMap,
+    directory: P,
 ) -> Result<(ParsedHTML, ExitMode), ParseError> {
-    // TODO: accept the ParsedHTML by mutable reference
-    // TODO: Add parse mode enum for when inside link or template
-    let html = String::new();
-    let links_to = Vec::new();
-    let parents = Vec::new();
     let mut parsed_html = ParsedHTML {
-        html,
-        links_to,
-        parents,
+        html: String::new(),
+        links_to: Vec::new(),
+        parents: Vec::new(),
     };
 
     let mut modifier_stack = Vec::new();
 
-    // parsed_html.html.push_str("<p>");
+    parsed_html.html.push_str("<p>");
     while let Some(character) = chars.next() {
         chars.putback(character);
         if let Some(&open_delimiter) = modifier_stack.last() {
             if has_close_delimiter(chars, open_delimiter) {
                 let _ = modifier_stack.pop().unwrap();
-                parsed_html.html.push_str(open_delimiter.close());
+                parsed_html.html.push_str(open_delimiter.close().as_str());
                 continue;
             }
         }
@@ -91,7 +116,7 @@ pub fn markdown_charbuff_to_html(
             match delimiter {
                 Delimiter::TextModifier(text_modifier) => {
                     modifier_stack.push(text_modifier);
-                    parsed_html.html.push_str(text_modifier.open());
+                    parsed_html.html.push_str(text_modifier.open().as_str());
                 }
                 Delimiter::ExclusiveModifier(ExclusiveModifier::EndOfArgument) => {
                     return Ok((parsed_html, ExitMode::EndOfArgument));
@@ -100,13 +125,22 @@ pub fn markdown_charbuff_to_html(
                     return Ok((parsed_html, ExitMode::EndOfTemplate));
                 }
                 Delimiter::ExclusiveModifier(exclusive_modifier) => {
-                    exclusive_modifier.to_html(chars, &mut parsed_html);
+                    match exclusive_modifier.to_html(
+                        chars,
+                        &mut parsed_html,
+                        &templates,
+                        directory.as_ref().to_path_buf(),
+                    ) {
+                        Some(e) => return Err(e),
+                        None => (),
+                    }
                 }
             }
         } else {
             parsed_html.html.push(chars.next().unwrap());
         }
     }
+    parsed_html.html.push_str("</p>");
     if modifier_stack.is_empty() {
         Ok((parsed_html, ExitMode::EndOfFile))
     } else {
@@ -133,7 +167,17 @@ fn has_close_delimiter(chars: &mut PutBackChars, delimiter: TextModifier) -> boo
             }
         },
         TextModifier::Italics => match chars.next() {
-            Some('*') => true, // TODO: Only close on “*…,” not on “**.”
+            Some('*') => match chars.next() {
+                Some('*') => {
+                    chars.putback('*');
+                    chars.putback('*');
+                    false
+                }
+                other => {
+                    chars.putback_maybe(other);
+                    true
+                }
+            },
             other => {
                 chars.putback_maybe(other);
                 false
@@ -190,6 +234,13 @@ fn has_close_delimiter(chars: &mut PutBackChars, delimiter: TextModifier) -> boo
                 false
             }
         },
+        TextModifier::Heading(_) => match chars.next() {
+            Some('\n') => true,
+            other => {
+                chars.putback_maybe(other);
+                false
+            }
+        },
     }
 }
 
@@ -219,7 +270,10 @@ fn find_open_delimiter(chars: &mut PutBackChars) -> Option<Delimiter> {
             }
         },
         '\n' => match chars.next() {
-            Some('\n') => Some(Delimiter::ExclusiveModifier(ExclusiveModifier::Paragraph)),
+            Some('\n') => {
+                chars.putback('\n');
+                Some(Delimiter::ExclusiveModifier(ExclusiveModifier::Paragraph))
+            }
             Some('`') => match chars.next() {
                 Some('`') => match chars.next() {
                     Some('`') => Some(Delimiter::ExclusiveModifier(ExclusiveModifier::CodeBlock)),
@@ -258,9 +312,7 @@ fn find_open_delimiter(chars: &mut PutBackChars) -> Option<Delimiter> {
                         }
                     }
                 }
-                Some(Delimiter::ExclusiveModifier(ExclusiveModifier::Heading(
-                    header_level,
-                )))
+                Some(Delimiter::TextModifier(TextModifier::Heading(header_level)))
             }
             other => {
                 chars.putback_maybe(other);
@@ -303,6 +355,14 @@ fn find_open_delimiter(chars: &mut PutBackChars) -> Option<Delimiter> {
                 None
             }
         },
+        ']' => match chars.next() {
+            Some(']') => Some(Delimiter::ExclusiveModifier(ExclusiveModifier::EndOfLink)),
+            other => {
+                chars.putback_maybe(other);
+                chars.putback(']');
+                None
+            }
+        },
         '|' => Some(Delimiter::ExclusiveModifier(
             ExclusiveModifier::EndOfArgument,
         )),
@@ -314,22 +374,24 @@ fn find_open_delimiter(chars: &mut PutBackChars) -> Option<Delimiter> {
 }
 
 impl TextModifier {
-    pub(crate) fn close(self) -> &'static str {
+    pub(crate) fn close(self) -> String {
         match self {
-            TextModifier::Bold => "</b>",
-            TextModifier::Italics => "</i>",
-            TextModifier::Strikethrough => "</del>",
-            TextModifier::Underline => "</u>",
-            TextModifier::Quote => "</blockquote>",
+            TextModifier::Bold => "</b>".to_string(),
+            TextModifier::Italics => "</i>".to_string(),
+            TextModifier::Strikethrough => "</del>".to_string(),
+            TextModifier::Underline => "</u>".to_string(),
+            TextModifier::Quote => "</blockquote>".to_string(),
+            TextModifier::Heading(level) => format!("</h{level}>\n<p>"),
         }
     }
-    pub(crate) fn open(self) -> &'static str {
+    pub(crate) fn open(self) -> String {
         match self {
-            TextModifier::Bold => "<b>",
-            TextModifier::Italics => "<i>",
-            TextModifier::Strikethrough => "<del>",
-            TextModifier::Underline => "<u>",
-            TextModifier::Quote => "<blockquote>",
+            TextModifier::Bold => "<b>".to_string(),
+            TextModifier::Italics => "<i>".to_string(),
+            TextModifier::Strikethrough => "<del>".to_string(),
+            TextModifier::Underline => "<u>".to_string(),
+            TextModifier::Quote => "<blockquote>".to_string(),
+            TextModifier::Heading(level) => format!("</p>\n<h{level}>"),
         }
     }
 }
@@ -339,6 +401,8 @@ impl ExclusiveModifier {
         self,
         chars: &mut PutBackChars,
         parsed: &mut ParsedHTML,
+        templates: &TemplateMap,
+        directory: PathBuf,
     ) -> Option<ParseError> {
         match self {
             ExclusiveModifier::Escape => {
@@ -353,57 +417,29 @@ impl ExclusiveModifier {
                 }
             }
             ExclusiveModifier::Template => {
-                let mut name = String::new();
-                let name_exit;
-                loop {
-                    match chars.next() {
-                        Some('|') => {
-                            name_exit = ExitMode::EndOfArgument;
-                            break;
-                        }
-                        Some('}') => {
-                            if chars.next() != Some('}') {
-                                return Some(ParseError::from_str(
-                                    chars,
-                                    "Incorrectly closed template",
-                                ));
-                            }
-                            name_exit = ExitMode::EndOfTemplate;
-                            break;
-                        }
-                        Some(character) => {
-                            name.push(character);
-                        }
-                        None => {
-                            return Some(ParseError::from_str(
-                                chars,
-                                "Unexpected file ending inside template",
-                            ))
-                        }
-                    };
-                }
+                let (name, name_exit) = read_template_argument(chars);
                 let mut args = Vec::new();
+                // let _ = read_template_argument(chars);
                 if name_exit == ExitMode::EndOfArgument {
                     loop {
-                        match markdown_charbuff_to_html(chars) {
-                            Ok((result, reason)) => {
+                        match read_template_argument(chars) {
+                            (result, reason) => {
                                 args.push(result);
                                 match reason {
                                     ExitMode::EndOfArgument => continue,
                                     ExitMode::EndOfTemplate => break,
                                     ExitMode::EndOfFile => {
-                                        return Some(ParseError::from_str(
-                                            chars,
-                                            "Unexpected file ending inside template",
-                                        ))
+                                        panic!("End of file inside template argument")
                                     }
+                                    ExitMode::EndOfLink => panic!(
+                                        "Stray wiki-link terminator inside template argument"
+                                    ),
                                 }
                             }
-                            Err(e) => return Some(e),
                         }
                     }
                 }
-                let mut result: ParsedHTML = match parse_template(name.clone(), args) {
+                let mut result: ParsedHTML = match templates.call(name.clone(), args, directory) {
                     Ok((result, ExitMode::EndOfFile)) => result,
                     Ok(_) => return Some(ParseError::from_str(chars, "If you ever get this error, please send a bug report. I'm very curious how you can get this")),
                     Err(e) => return Some(ParseError::from_string(chars, format!("Error occurred while parsing template {name}:\n{}", e.comment))),
@@ -413,56 +449,248 @@ impl ExclusiveModifier {
                 parsed.parents.append(&mut result.parents);
                 None
             }
-            ExclusiveModifier::WikiLink => todo!(),
-            ExclusiveModifier::InlineCode => todo!(),
-            ExclusiveModifier::CodeBlock => todo!(),
-            ExclusiveModifier::Paragraph => {
-                parsed.html.push_str("<br>\n"); // TODO: do these properly
-                None
-            }
-            ExclusiveModifier::Heading(level) => {
-                // TODO: turn this into a normal modifier.
-                let mut raw_header = String::new();
-                loop {
-                    match chars.next() {
-                        Some('\n') => {
-                            chars.putback('\n');
-                            break;
-                        }
-                        Some(other) => raw_header.push(other),
-                        None => break,
-                    }
-                }
-                let mut parsed_header =
-                    match markdown_charbuff_to_html(&mut raw_header.chars().into()) {
-                        Ok((parsed, ExitMode::EndOfFile)) => parsed,
-                        Ok((_parsed, _other)) => {
+            ExclusiveModifier::WikiLink => {
+                let (name, reason) = read_template_argument(chars);
+                let full_name = format!("{name}.md");
+                let absolute_path = directory.join(&full_name);
+
+                let display_name = if reason == ExitMode::EndOfArgument {
+                    let (out, reason) = read_template_argument(chars);
+                    match reason {
+                        ExitMode::EndOfArgument => {
                             return Some(ParseError::from_str(
                                 chars,
-                                "Stray argument or template ending in heading.",
+                                "Cannot supply more than two arguments to a wikilink.",
                             ))
                         }
-                        Err(e) => return Some(e),
-                    };
+                        ExitMode::EndOfTemplate => {
+                            return Some(ParseError::from_str(
+                                chars,
+                                "Cannot close template inside wikilink.",
+                            ))
+                        }
+                        ExitMode::EndOfLink => out,
+                        ExitMode::EndOfFile => {
+                            return Some(ParseError::from_str(chars, "Unclosed wikilink."))
+                        }
+                    }
+                } else {
+                    match read_title(&absolute_path) {
+                        Some(title) => title,
+                        None => full_name.clone(),
+                    }
+                };
+                let path_name = match absolute_path.to_str() {
+                    Some(x) => x,
+                    None => return Some(ParseError::from_str(chars, "Path could not be resolved")),
+                };
                 parsed
                     .html
-                    .push_str(format!("<h{level}>{}</h{level}>", parsed_header.html).as_str());
-                parsed.links_to.append(&mut parsed_header.links_to);
-                parsed.parents.append(&mut parsed_header.parents);
+                    .push_str(format!("<a href={path_name}>{display_name}</a>").as_str());
                 None
             }
-            ExclusiveModifier::Link => todo!(),
-            ExclusiveModifier::Image => todo!(),
-            ExclusiveModifier::EndOfArgument => todo!(),
-            ExclusiveModifier::EndOfTemplate => todo!(),
+            ExclusiveModifier::InlineCode => {
+                parsed.html.push_str("<code>");
+                while let Some(character) = chars.next() {
+                    match character {
+                        '\\' => {
+                            let next = chars.next();
+                            match next {
+                                None => {
+                                    return Some(ParseError::from_str(
+                                        chars,
+                                        "File may not end with escape character.",
+                                    ))
+                                }
+                                Some('`') => parsed.html.push('`'),
+                                Some(other) => {
+                                    parsed.html.push('\\');
+                                    parsed.html.push(other);
+                                }
+                            }
+                        }
+                        '`' => break,
+                        other => parsed.html.push(other),
+                    }
+                }
+                parsed.html.push_str("</code>");
+                None
+            }
+            ExclusiveModifier::CodeBlock => {
+                let mut name = String::new();
+                loop {
+                    match chars.next() {
+                        None => {
+                            return Some(ParseError::from_str(
+                                chars,
+                                "Cannot end file inside codeblock",
+                            ))
+                        }
+                        Some('\n') => break,
+                        Some(other) => name.push(other),
+                    }
+                }
+                parsed
+                    .html
+                    .push_str(format!("<pre><code class={name}>").as_str());
+                while let Some(character) = chars.next() {
+                    match character {
+                        '\n' => match chars.next() {
+                            None => {
+                                return Some(ParseError::from_str(
+                                    chars,
+                                    "Cannot end file inside codeblock",
+                                ))
+                            }
+                            Some('`') => match chars.next() {
+                                None => {
+                                    return Some(ParseError::from_str(
+                                        chars,
+                                        "Cannot end file inside codeblock",
+                                    ))
+                                }
+                                Some('`') => match chars.next() {
+                                    None => {
+                                        return Some(ParseError::from_str(
+                                            chars,
+                                            "Cannot end file inside codeblock",
+                                        ))
+                                    }
+                                    Some('`') => match chars.next() {
+                                        None => {
+                                            return Some(ParseError::from_str(
+                                                chars,
+                                                "Cannot end file inside codeblock",
+                                            ))
+                                        }
+                                        Some('\n') => break,
+                                        Some(other) => {
+                                            parsed.html.push_str("\n```");
+                                            parsed.html.push(other);
+                                        }
+                                    },
+                                    Some(other) => {
+                                        parsed.html.push_str("\n``");
+                                        parsed.html.push(other);
+                                    }
+                                },
+                                Some(other) => {
+                                    parsed.html.push_str("\n`");
+                                    parsed.html.push(other);
+                                }
+                            },
+                            Some(other) => {
+                                parsed.html.push('\n');
+                                parsed.html.push(other);
+                            }
+                        },
+                        other => parsed.html.push(other),
+                    }
+                }
+                parsed.html.push_str("</code></pre>");
+                None
+            }
+            ExclusiveModifier::Paragraph => {
+                parsed.html.push_str("</pre>\n<p>");
+                None
+            }
+            ExclusiveModifier::Link => {
+                let mut name = String::new();
+                loop {
+                    match chars.next() {
+                        Some(']') => break,
+                        Some(character) => name.push(character),
+                        None => return Some(ParseError::from_str(chars, "Unterminated link name")),
+                    };
+                }
+                match chars.next() {
+                    Some('(') => (),
+                    other => {
+                        chars.putback_maybe(other);
+                        return None;
+                    }
+                }
+                let mut url = String::new();
+                loop {
+                    match chars.next() {
+                        Some(')') => break,
+                        Some(character) => url.push(character),
+                        None => return Some(ParseError::from_str(chars, "Unterminated link body")),
+                    }
+                }
+                parsed
+                    .html
+                    .push_str(format!("<a href={url}>{name}</a>\n").as_str());
+                None
+            }
+            ExclusiveModifier::Image => {
+                let mut name = String::new();
+                loop {
+                    match chars.next() {
+                        Some(']') => break,
+                        Some(character) => name.push(character),
+                        None => return Some(ParseError::from_str(chars, "Unterminated link name")),
+                    };
+                }
+                match chars.next() {
+                    Some('(') => (),
+                    other => {
+                        chars.putback_maybe(other);
+                        return None;
+                    }
+                }
+                let mut url = String::new();
+                loop {
+                    match chars.next() {
+                        Some(')') => break,
+                        Some(character) => url.push(character),
+                        None => return Some(ParseError::from_str(chars, "Unterminated link body")),
+                    }
+                }
+                parsed
+                    .html
+                    .push_str(format!("<img src=\"{url}\" alt=\"{name}\"/>\n").as_str());
+                None
+            }
+            ExclusiveModifier::EndOfArgument => panic!("Unreachable state"),
+            ExclusiveModifier::EndOfTemplate => panic!("Unreachable state"),
+            ExclusiveModifier::EndOfLink => panic!("Unreachable state"),
         }
     }
 }
 
-fn parse_template(
-    name: String,
-    args: Vec<ParsedHTML>,
-) -> Result<(ParsedHTML, ExitMode), ParseError> {
-    todo!()
-    // TODO, map of dyn Template where Template is a traid with pub fn fmt(self, args: Vec<ParsedHTML>) -> Result<ParsedHTML, ParseError>
+fn read_title<T>(file: T) -> Option<String>
+where
+    T: AsRef<Path>,
+{
+    let contents = match std::fs::read_to_string(&file) {
+        Ok(x) => x,
+        Err(_) => {
+            return None;
+        }
+    };
+    let mut chars: PutBackChars = contents.chars().into();
+    if chars.next() != Some('#') {
+        return None;
+    }
+    let mut out_unparsed = String::new();
+    loop {
+        match chars.next() {
+            None => return None,
+            Some('#') => return None,
+            Some('\\') => {
+                out_unparsed.push('\\');
+                out_unparsed.push(chars.next()?);
+            }
+            Some('\n') => break,
+            Some(other) => out_unparsed.push(other),
+        }
+    }
+    let mut out_chars: PutBackChars = out_unparsed.chars().into();
+    let result =
+        markdown_charbuff_to_html(&mut out_chars, &TemplateMap::new(), file.as_ref().parent()?);
+    match result {
+        Err(_) => None,
+        Ok(x) => Some(x.0.html),
+    }
 }

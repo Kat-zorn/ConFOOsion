@@ -1,11 +1,13 @@
-use std::str::Chars;
+use std::{iter::Iterator, str::Chars};
 
+#[derive(Clone, Debug)]
 pub struct PutBackChars<'a> {
     internal: UnmarkedPutBackChars<'a>,
     pub line_number: usize,
     pub column_number: usize,
 }
 
+#[derive(Clone)]
 struct UnmarkedPutBackChars<'a> {
     iter: Chars<'a>,
     buffer: Vec<char>,
@@ -17,6 +19,23 @@ impl<'a> From<Chars<'a>> for UnmarkedPutBackChars<'a> {
             iter: value,
             buffer: Vec::new(),
         }
+    }
+}
+
+impl<'a> std::fmt::Debug for UnmarkedPutBackChars<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let inner_text: String = self.clone().collect();
+        f.debug_struct("UnmarkedPutBackChars")
+            .field("remaining characters", &inner_text)
+            .finish()
+    }
+}
+
+impl<'a> Iterator for UnmarkedPutBackChars<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next()
     }
 }
 
