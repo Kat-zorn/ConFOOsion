@@ -37,25 +37,29 @@ These purposes explicitly exclude:
 
 - Running DOOM on the Software.
 - Facilitating illegal activities.
+- Training artificial intelligence on the Software or part of the Software.
 
 ## Intellectual Property Rights
 
-The Developer retains all rights to the trademarks of the Software.
+The Developer retains all rights to the Software, except those allowed in this document.
+This means that all trademarks related to the Software are only for the Developer to use.
 
 ## Derivative works
 
-Any person may, free of charge, and without communication this with the Developer, create a Derivative work.
+Any person may, free of charge, and without communicating this with the Developer, create a Derivative work.
 
-A Derivative work may be commercial in nature.
+Derivative works may be commercial in nature.
 
 Derivative works must provide attribution. This includes at a minimum:
 
-- The name of the Developer,
-- The name of the Software,
-- A link, QR code, or similar referral to the Code.
+- The name of the Developer;
+- The name of the Software; and
+- A link, QR code, or similar referral to the Code (including this license).
 
-The authors of a Derivative work that is not for personal use, and relies on a modified version of the Code (such as a GitHub fork) must allow the Developer to view this modified Code, free of charge, whenever the Developers requests this.
-The Developer retains the right to implement any modifications made by this author into the Code without the author's consent. When this happens, this author is given the same rights as a Contributor.
+The authors of a Derivative work that is not for personal use, and relies on a modified version of the Code (such as a GitHub fork) must allow the Developer to view this modified Code, free of charge, whenever the Developer requests this. Simply making the modified code available to the public also suffices.
+Personal use, in this case, means a project with up to 5 developers and users that does not publicly distribute its binaries.
+
+The Developer retains the right to implement any modifications made by this author to the Code without the author's consent. When this happens, this author is treated as a Contributor.
 
 ## Contributors
 
@@ -65,4 +69,4 @@ All contributors grant the Developer non-exclusive, worldwide rights to the part
 
 ## Source availability
 
-The Developers makes the commitment to keep the Code available to the Users. This means that any User will be able to view the Code of the relevant binary, free of charge, whenever they obtain a copy of this Binary through official means.
+The Developers makes the commitment to make the Code available to the Users. This means that any User will be able to view and obtain a copy of the Code of the relevant binary, free of charge, whenever they obtain a copy of this Binary through official means.
