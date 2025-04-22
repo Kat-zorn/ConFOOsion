@@ -1,4 +1,5 @@
 */target/
 */firedgb/
+confoosion-markdown-parser/out.html
 .*
 !.gitignore
